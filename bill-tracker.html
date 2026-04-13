@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bill Tracker</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f3;color:#1a1a1a;min-height:100vh}
+.header{background:#fff;border-bottom:1px solid #e5e5e5;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+.header h1{font-size:17px;font-weight:600;letter-spacing:-0.3px}
+.sync-indicator{display:flex;align-items:center;gap:6px;font-size:12px;color:#666}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:#639922;flex-shrink:0}
+.sync-dot.syncing{background:#EF9F27;animation:pulse 1s infinite}
+.sync-dot.error{background:#E24B4A}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+.container{max-width:680px;margin:0 auto;padding:16px}
+.metrics{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px}
+@media(min-width:480px){.metrics{grid-template-columns:repeat(4,1fr)}}
+.metric{background:#fff;border-radius:10px;padding:12px 14px;border:1px solid #e5e5e5}
+.metric-label{font-size:11px;color:#888;margin-bottom:4px}
+.metric-value{font-size:20px;font-weight:600}
+.metric-value.red{color:#c0392b}
+.metric-value.amber{color:#d68910}
+.tabs{display:flex;gap:0;border-bottom:1px solid #e5e5e5;margin-bottom:16px;background:#fff;border-radius:10px 10px 0 0;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tab{padding:10px 16px;font-size:13px;font-weight:500;cursor:pointer;border:none;background:none;color:#888;border-bottom:2px solid transparent;white-space:nowrap;flex-shrink:0}
+.tab.active{color:#1a1a1a;border-bottom:2px solid #1a1a1a}
+.section{display:none}.section.active{display:block}
+.bills-list{display:flex;flex-direction:column;gap:8px}
+.bill-card{background:#fff;border-radius:10px;border:1px solid #e5e5e5;padding:14px;transition:border-color 0.15s}
+.bill-card.editing{border-color:#1a1a1a}
+.bill-top{display:flex;align-items:flex-start;gap:10px}
+.priority-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:5px}
+.dot-red{background:#E24B4A}.dot-amber{background:#EF9F27}.dot-green{background:#639922}.dot-gray{background:#aaa}
+.bill-info{flex:1;min-width:0}
+.bill-name{font-size:15px;font-weight:600;margin-bottom:2px}
+.bill-cat{font-size:12px;color:#888}
+.bill-amounts{text-align:right;flex-shrink:0}
+.bill-payment{font-size:15px;font-weight:600}
+.bill-balance{font-size:11px;color:#888;margin-top:1px}
+.missing-amt{font-size:11px;color:#d68910;font-style:italic}
+.bill-due{font-size:12px;color:#888;margin-top:1px}
+.bill-mid{display:flex;align-items:center;justify-content:space-between;margin-top:8px;flex-wrap:wrap;gap:6px}
+.badge{font-size:11px;padding:3px 8px;border-radius:6px;font-weight:500}
+.badge-red{background:#fde8e8;color:#c0392b}
+.badge-amber{background:#fef3cd;color:#856404}
+.badge-green{background:#d4edda;color:#155724}
+.badge-gray{background:#f0f0f0;color:#666}
+.btn-row{display:flex;gap:5px;flex-wrap:wrap}
+.action-btn{font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer;color:#555;white-space:nowrap}
+.action-btn:hover{background:#f5f5f5}
+.del-btn{font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid #f0d0d0;background:#fff;cursor:pointer;color:#c0392b}
+.bill-footer{margin-top:8px;padding-top:8px;border-top:1px solid #f0f0f0;font-size:11px;color:#aaa;display:flex;gap:14px;flex-wrap:wrap}
+.edit-form{margin-top:12px;padding-top:12px;border-top:1px solid #f0f0f0;display:none}
+.edit-form.open{display:block}
+.edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+@media(min-width:480px){.edit-grid-3{grid-template-columns:1fr 1fr 1fr}}
+.ef-field label{font-size:11px;color:#888;display:block;margin-bottom:3px;font-weight:500}
+.ef-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}
+input[type=text],input[type=number],input[type=date],select,textarea{width:100%;padding:8px 10px;font-size:14px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#1a1a1a;font-family:inherit;-webkit-appearance:none}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#1a1a1a}
+textarea{min-height:110px;resize:vertical;line-height:1.5}
+.btn-primary{padding:10px 20px;background:#1a1a1a;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;width:100%}
+.btn-primary:hover{opacity:0.85}
+.btn-primary:disabled{opacity:0.4;cursor:not-allowed}
+.btn-save{padding:7px 16px;background:#1a1a1a;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:500}
+.btn-cancel{padding:7px 16px;background:#fff;border:1px solid #ddd;border-radius:8px;font-size:13px;cursor:pointer;color:#1a1a1a}
+.parse-box{background:#fff;border-radius:10px;border:1px solid #e5e5e5;padding:14px;margin-bottom:12px}
+.parse-result{margin-top:12px;display:none}
+.parsed-item{padding:10px 0;border-bottom:1px solid #f0f0f0;display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+.parsed-item:last-child{border-bottom:none}
+.parsed-name{font-size:14px;font-weight:500}
+.parsed-meta{font-size:12px;color:#888;margin-top:2px}
+.status-row{display:flex;align-items:center;gap:8px;margin-top:10px;padding:10px;background:#f9f9f9;border-radius:8px;font-size:12px;color:#666}
+.filter-row{display:flex;gap:8px;margin-bottom:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+.filter-btn{padding:6px 14px;font-size:12px;border:1px solid #ddd;border-radius:20px;background:#fff;cursor:pointer;color:#666;white-space:nowrap;flex-shrink:0}
+.filter-btn.active{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+.paid-card{opacity:0.45}
+.deleted-card{opacity:0.4}
+.empty-state{text-align:center;padding:3rem 1rem;color:#aaa;font-size:14px}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px}
+.modal{background:#fff;border-radius:14px;padding:20px;max-width:300px;width:100%}
+.modal-title{font-size:16px;font-weight:600;margin-bottom:8px}
+.modal-body{font-size:14px;color:#666;margin-bottom:20px;line-height:1.5}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end}
+.modal-cancel{padding:8px 16px;background:#fff;border:1px solid #ddd;border-radius:8px;font-size:13px;cursor:pointer}
+.modal-confirm{padding:8px 16px;background:#E24B4A;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:500}
+.form-section{background:#fff;border-radius:10px;border:1px solid #e5e5e5;padding:14px;margin-bottom:12px}
+.form-section-title{font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px}
+.api-note{font-size:12px;color:#888;margin-top:8px;line-height:1.5}
+.key-input{font-family:monospace;font-size:13px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Bill Tracker</h1>
+  <div class="sync-indicator">
+    <div class="sync-dot" id="sync-dot"></div>
+    <span id="sync-status">Ready</span>
+  </div>
+</div>
+
+<div id="confirm-modal" style="display:none">
+  <div class="modal-overlay">
+    <div class="modal">
+      <div class="modal-title">Delete this bill?</div>
+      <div class="modal-body" id="modal-msg"></div>
+      <div class="modal-actions">
+        <button class="modal-cancel" onclick="closeModal()">Cancel</button>
+        <button class="modal-confirm" onclick="confirmDelete()">Move to deleted</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <div class="metrics">
+    <div class="metric"><div class="metric-label">Total owed</div><div class="metric-value" id="m-total">$0.00</div></div>
+    <div class="metric"><div class="metric-label">Urgent</div><div class="metric-value red" id="m-urgent">0</div></div>
+    <div class="metric"><div class="metric-label">Due this week</div><div class="metric-value amber" id="m-week">0</div></div>
+    <div class="metric"><div class="metric-label">Bills tracked</div><div class="metric-value" id="m-count">0</div></div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('dashboard')">Dashboard</button>
+    <button class="tab" onclick="switchTab('paste')">Paste text</button>
+    <button class="tab" onclick="switchTab('manual')">Manual entry</button>
+    <button class="tab" onclick="switchTab('paid')">Paid</button>
+    <button class="tab" onclick="switchTab('deleted')">Deleted</button>
+    <button class="tab" onclick="switchTab('settings')">Settings</button>
+  </div>
+
+  <div id="tab-dashboard" class="section active">
+    <div class="filter-row">
+      <button class="filter-btn active" onclick="setFilter('all',this)">All open</button>
+      <button class="filter-btn" onclick="setFilter('urgent',this)">Urgent</button>
+      <button class="filter-btn" onclick="setFilter('week',this)">This week</button>
+      <button class="filter-btn" onclick="setFilter('missing',this)">Missing amount</button>
+    </div>
+    <div id="bills-list" class="bills-list"></div>
+  </div>
+
+  <div id="tab-paste" class="section">
+    <div class="parse-box">
+      <p style="font-size:13px;color:#666;margin-bottom:10px">Paste bill alerts from texts or emails. AI extracts and syncs to Google Sheets.</p>
+      <textarea id="paste-input" placeholder="Paste one or more bill alerts here...&#10;&#10;e.g. PG&E Alert: Your bill of $142 is due April 15, 2026"></textarea>
+      <div style="margin-top:10px;display:flex;gap:10px;align-items:center">
+        <button class="btn-primary" id="parse-btn" onclick="parseBills()" style="width:auto;padding:10px 20px">Parse bills</button>
+        <span id="parse-status" style="font-size:13px;color:#888;display:none">Parsing with AI...</span>
+      </div>
+      <div id="parse-result" class="parse-result">
+        <div style="font-size:12px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Parsed — review and confirm</div>
+        <div id="parsed-rows"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
+          <span id="parsed-count" style="font-size:12px;color:#888"></span>
+          <button class="btn-save" onclick="confirmParsed()">Add all to tracker</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-manual" class="section">
+    <div class="form-section">
+      <div class="form-section-title">Bill details</div>
+      <div class="edit-grid" style="margin-bottom:10px">
+        <div class="ef-field"><label>Bill name</label><input type="text" id="m-name" placeholder="e.g. PG&E"></div>
+        <div class="ef-field"><label>Category</label><select id="m-cat"><option>Utilities</option><option>Insurance</option><option>Auto Loan</option><option>Credit Card</option><option>Software</option><option>Phone</option><option>Rent</option><option>Internet</option><option>Other</option></select></div>
+        <div class="ef-field"><label>Payment due ($)</label><input type="number" id="m-amount" placeholder="0.00" step="0.01"></div>
+        <div class="ef-field"><label>Balance ($)</label><input type="number" id="m-balance" placeholder="0.00" step="0.01"></div>
+        <div class="ef-field"><label>Due date</label><input type="date" id="m-due"></div>
+        <div class="ef-field"><label>Status</label><select id="m-status"><option>Unpaid</option><option>Past Due</option></select></div>
+      </div>
+      <div class="ef-field" style="margin-bottom:12px"><label>Notes</label><input type="text" id="m-notes" placeholder="Optional"></div>
+      <button class="btn-primary" onclick="addManual()">Add bill</button>
+      <div id="manual-msg" style="font-size:13px;margin-top:10px;color:green;display:none">Added and synced to sheet!</div>
+    </div>
+  </div>
+
+  <div id="tab-paid" class="section"><div id="paid-list" class="bills-list"></div></div>
+
+  <div id="tab-deleted" class="section">
+    <p style="font-size:13px;color:#888;margin-bottom:12px">Recoverable. Restore any time.</p>
+    <div id="deleted-list" class="bills-list"></div>
+  </div>
+
+  <div id="tab-settings" class="section">
+    <div class="form-section">
+      <div class="form-section-title">Anthropic API key</div>
+      <div class="ef-field">
+        <label>API key (for AI parsing)</label>
+        <input type="password" id="api-key-input" class="key-input" placeholder="sk-ant-...">
+      </div>
+      <p class="api-note">Get your key at console.anthropic.com → API Keys. Stored locally on your device only.</p>
+      <button class="btn-save" style="margin-top:10px" onclick="saveApiKey()">Save key</button>
+      <div id="key-msg" style="font-size:12px;margin-top:8px;color:green;display:none">Saved!</div>
+    </div>
+    <div class="form-section">
+      <div class="form-section-title">Google Sheets webhook</div>
+      <div class="ef-field">
+        <label>Apps Script URL</label>
+        <input type="text" id="webhook-input" class="key-input" placeholder="https://script.google.com/macros/s/...">
+      </div>
+      <button class="btn-save" style="margin-top:10px" onclick="saveWebhook()">Save webhook</button>
+      <div id="webhook-msg" style="font-size:12px;margin-top:8px;color:green;display:none">Saved!</div>
+    </div>
+    <div class="form-section">
+      <div class="form-section-title">Sync</div>
+      <button class="btn-primary" onclick="syncAll()">Force full sync to Google Sheets</button>
+      <div id="sync-msg" style="font-size:12px;margin-top:8px;color:#666;display:none"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY = 'billtracker_v1';
+const CATS = ['Utilities','Insurance','Auto Loan','Credit Card','Software','Phone','Rent','Internet','Other'];
+let bills = [];
+let parsedItems = [];
+let currentFilter = 'all';
+let pendingDeleteId = null;
+
+function getApiKey(){ return localStorage.getItem('bt_apikey')||''; }
+function getWebhook(){ return localStorage.getItem('bt_webhook')||'https://script.google.com/macros/s/AKfycbwUJUpFKPzcsjHIhRSciJsSu0F97dIlTcdHcYptrq6-GQ2mvz3DEBUpr3pwjVKunmML/exec'; }
+
+function saveApiKey(){
+  localStorage.setItem('bt_apikey', document.getElementById('api-key-input').value.trim());
+  const m=document.getElementById('key-msg'); m.style.display='block';
+  setTimeout(()=>m.style.display='none',2000);
+}
+
+function saveWebhook(){
+  localStorage.setItem('bt_webhook', document.getElementById('webhook-input').value.trim());
+  const m=document.getElementById('webhook-msg'); m.style.display='block';
+  setTimeout(()=>m.style.display='none',2000);
+}
+
+function setSyncStatus(state, msg){
+  document.getElementById('sync-dot').className='sync-dot'+(state==='syncing'?' syncing':state==='error'?' error':'');
+  document.getElementById('sync-status').textContent=msg;
+}
+
+async function pushToSheet(action, data){
+  const webhook=getWebhook();
+  if(!webhook) return;
+  setSyncStatus('syncing','Syncing...');
+  try{
+    await fetch(webhook,{
+      method:'POST',
+      headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({action,...data})
+    });
+    setSyncStatus('ok','Synced '+new Date().toLocaleTimeString());
+  }catch(e){
+    setSyncStatus('error','Sync failed — saved locally');
+  }
+}
+
+async function syncAll(){
+  const webhook=getWebhook();
+  if(!webhook){alert('Add your webhook URL in Settings first.');return;}
+  setSyncStatus('syncing','Syncing all bills...');
+  try{
+    const resp=await fetch(webhook,{
+      method:'POST',
+      headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({action:'sync',bills:bills.filter(b=>!b.deleted)})
+    });
+    const text=await resp.text();
+    setSyncStatus('ok','Full sync complete '+new Date().toLocaleTimeString());
+    const m=document.getElementById('sync-msg');
+    m.textContent='Synced '+bills.filter(b=>!b.deleted).length+' bills to Google Sheets.';
+    m.style.display='block';
+    setTimeout(()=>m.style.display='none',3000);
+  }catch(e){
+    setSyncStatus('error','Sync failed — check webhook URL in Settings');
+  }
+}
+
+function loadBills(){
+  try{
+    const raw=localStorage.getItem(STORAGE_KEY);
+    if(raw) bills=JSON.parse(raw);
+  }catch(e){bills=[];}
+  document.getElementById('api-key-input').value=getApiKey();
+  document.getElementById('webhook-input').value=getWebhook();
+  render();
+}
+
+function saveBills(){
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(bills));
+}
+
+function td(){ return new Date().toISOString().split('T')[0]; }
+
+function getPri(b){
+  if(b.status==='Past Due') return 'red';
+  if(!b.dueDate) return 'gray';
+  const d=Math.ceil((new Date(b.dueDate)-new Date())/86400000);
+  if(d<0||d<=2) return 'red';
+  if(d<=7) return 'amber';
+  return 'green';
+}
+
+function getPriLabel(b){
+  if(b.status==='Past Due') return 'Past due';
+  if(!b.dueDate) return '';
+  const d=Math.ceil((new Date(b.dueDate)-new Date())/86400000);
+  if(d<0) return 'Overdue';
+  if(d===0) return 'Due today';
+  if(d===1) return 'Due tomorrow';
+  if(d<=2) return 'Due soon';
+  if(d<=7) return 'This week';
+  return '';
+}
+
+function fmtDate(d){
+  if(!d) return '—';
+  return new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+
+function fmtAmt(a){
+  if(!a||a==0) return null;
+  return '$'+parseFloat(a).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+function catOpts(sel){
+  return CATS.map(c=>`<option${c===sel?' selected':''}>${c}</option>`).join('');
+}
+
+function rowHTML(b, mode){
+  const pri=getPri(b), lbl=getPriLabel(b);
+  const bc={red:'badge-red',amber:'badge-amber',green:'badge-green',gray:'badge-gray'}[pri];
+  const payment=fmtAmt(b.amount);
+  const balance=fmtAmt(b.balance);
+  const rc=mode==='paid'?'paid-card':mode==='deleted'?'deleted-card':'';
+
+  let amountHTML='';
+  if(payment&&balance){
+    amountHTML=`<div class="bill-payment">${payment}</div><div class="bill-balance">Balance: ${balance}</div>`;
+  } else if(payment){
+    amountHTML=`<div class="bill-payment">${payment}</div>`;
+  } else if(balance){
+    amountHTML=`<div class="bill-balance">Balance: ${balance}</div>`;
+  } else {
+    amountHTML=`<div class="missing-amt">amount unknown</div>`;
+  }
+
+  let acts='';
+  if(mode==='open') acts=`<div class="btn-row"><button class="action-btn" onclick="toggleEdit('${b.id}')">Edit</button><button class="action-btn" onclick="markPaid('${b.id}')">Mark paid</button><button class="del-btn" onclick="reqDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')">Delete</button></div>`;
+  else if(mode==='paid') acts=`<div class="btn-row"><button class="action-btn" onclick="toggleEdit('${b.id}')">Edit</button><button class="action-btn" onclick="markUnpaid('${b.id}')">Unpay</button><button class="del-btn" onclick="reqDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')">Delete</button></div>`;
+  else if(mode==='deleted') acts=`<div class="btn-row"><button class="action-btn" onclick="restoreBill('${b.id}')">Restore</button></div>`;
+
+  return `<div class="bill-card ${rc}" id="row-${b.id}">
+    <div class="bill-top">
+      <div class="priority-dot dot-${pri}"></div>
+      <div class="bill-info">
+        <div class="bill-name">${b.name}</div>
+        <div class="bill-cat">${b.category}${b.notes?' · '+b.notes:''}</div>
+      </div>
+      <div class="bill-amounts">
+        ${amountHTML}
+        <div class="bill-due">Due ${fmtDate(b.dueDate)}</div>
+      </div>
+    </div>
+    <div class="bill-mid">
+      ${lbl?`<span class="badge ${bc}">${lbl}</span>`:'<span></span>'}
+      ${acts}
+    </div>
+    <div class="bill-footer">
+      <span>Logged ${fmtDate(b.loggedAt)}</span>
+      ${b.paidAt?`<span>Paid ${fmtDate(b.paidAt)}</span>`:''}
+      ${b.deletedAt?`<span>Deleted ${fmtDate(b.deletedAt)}</span>`:''}
+    </div>
+    <div class="edit-form" id="ef-${b.id}">
+      <div class="edit-grid" style="margin-bottom:10px">
+        <div class="ef-field"><label>Bill name</label><input type="text" id="en-${b.id}" value="${b.name}"></div>
+        <div class="ef-field"><label>Category</label><select id="ec-${b.id}">${catOpts(b.category)}</select></div>
+        <div class="ef-field"><label>Payment due ($)</label><input type="number" id="ea-${b.id}" value="${b.amount||''}" step="0.01" placeholder="0.00"></div>
+        <div class="ef-field"><label>Balance ($)</label><input type="number" id="eb-${b.id}" value="${b.balance||''}" step="0.01" placeholder="0.00"></div>
+        <div class="ef-field"><label>Due date</label><input type="date" id="ed-${b.id}" value="${b.dueDate||''}"></div>
+        <div class="ef-field"><label>Status</label><select id="es-${b.id}"><option value="Unpaid"${b.status==='Unpaid'?' selected':''}>Unpaid</option><option value="Past Due"${b.status==='Past Due'?' selected':''}>Past due</option></select></div>
+      </div>
+      <div class="ef-field" style="margin-bottom:10px"><label>Notes</label><input type="text" id="eno-${b.id}" value="${b.notes||''}" placeholder="Optional"></div>
+      <div class="ef-actions">
+        <button class="btn-cancel" onclick="toggleEdit('${b.id}')">Cancel</button>
+        <button class="btn-save" onclick="saveEdit('${b.id}')">Save + sync</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function toggleEdit(id){
+  const ef=document.getElementById('ef-'+id);
+  const row=document.getElementById('row-'+id);
+  const open=ef.classList.contains('open');
+  ef.classList.toggle('open',!open);
+  row.classList.toggle('editing',!open);
+}
+
+function saveEdit(id){
+  const b=bills.find(x=>x.id===id);
+  if(!b)return;
+  b.name=document.getElementById('en-'+id).value.trim()||b.name;
+  b.amount=parseFloat(document.getElementById('ea-'+id).value)||null;
+  b.balance=parseFloat(document.getElementById('eb-'+id).value)||null;
+  b.dueDate=document.getElementById('ed-'+id).value||null;
+  b.category=document.getElementById('ec-'+id).value;
+  b.status=document.getElementById('es-'+id).value;
+  b.notes=document.getElementById('eno-'+id).value.trim();
+  saveBills();render();
+  pushToSheet('update',{bill:b});
+}
+
+function render(){
+  const open=bills.filter(b=>!b.paid&&!b.deleted);
+  const paid=bills.filter(b=>b.paid&&!b.deleted);
+  const del=bills.filter(b=>b.deleted);
+
+  let filt=[...open];
+  if(currentFilter==='urgent') filt=open.filter(b=>getPri(b)==='red');
+  if(currentFilter==='week') filt=open.filter(b=>['red','amber'].includes(getPri(b)));
+  if(currentFilter==='missing') filt=open.filter(b=>!b.amount&&!b.balance);
+  filt.sort((a,b)=>{const o={red:0,amber:1,green:2,gray:3};return(o[getPri(a)]||3)-(o[getPri(b)]||3);});
+
+  document.getElementById('bills-list').innerHTML=filt.length?filt.map(b=>rowHTML(b,'open')).join(''):'<div class="empty-state">No bills match this filter.</div>';
+  document.getElementById('paid-list').innerHTML=paid.length?paid.map(b=>rowHTML(b,'paid')).join(''):'<div class="empty-state">No paid bills yet.</div>';
+  document.getElementById('deleted-list').innerHTML=del.length?del.map(b=>rowHTML(b,'deleted')).join(''):'<div class="empty-state">No deleted bills.</div>';
+
+  const owed=open.filter(b=>b.amount).reduce((s,b)=>s+parseFloat(b.amount),0);
+  document.getElementById('m-total').textContent='$'+owed.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  document.getElementById('m-urgent').textContent=open.filter(b=>getPri(b)==='red').length;
+  document.getElementById('m-week').textContent=open.filter(b=>['red','amber'].includes(getPri(b))).length;
+  document.getElementById('m-count').textContent=open.length;
+}
+
+function switchTab(t){
+  const tabs=['dashboard','paste','manual','paid','deleted','settings'];
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',tabs[i]===t));
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.getElementById('tab-'+t).classList.add('active');
+}
+
+function setFilter(f,el){
+  currentFilter=f;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  render();
+}
+
+function reqDelete(id,name){
+  pendingDeleteId=id;
+  document.getElementById('modal-msg').textContent=`"${name}" will move to Deleted. Restore any time.`;
+  document.getElementById('confirm-modal').style.display='block';
+}
+function closeModal(){pendingDeleteId=null;document.getElementById('confirm-modal').style.display='none';}
+function confirmDelete(){
+  const b=bills.find(x=>x.id===pendingDeleteId);
+  if(b){b.deleted=true;b.deletedAt=td();}
+  saveBills();render();closeModal();
+  if(b) pushToSheet('delete',{bill:b});
+}
+function restoreBill(id){
+  const b=bills.find(x=>x.id===id);
+  if(b){b.deleted=false;delete b.deletedAt;}
+  saveBills();render();
+  if(b) pushToSheet('update',{bill:b});
+}
+function markPaid(id){
+  const b=bills.find(x=>x.id===id);
+  if(b){b.paid=true;b.paidAt=td();saveBills();render();pushToSheet('paid',{bill:b});}
+}
+function markUnpaid(id){
+  const b=bills.find(x=>x.id===id);
+  if(b){b.paid=false;delete b.paidAt;saveBills();render();pushToSheet('update',{bill:b});}
+}
+
+async function parseBills(){
+  const text=document.getElementById('paste-input').value.trim();
+  if(!text){alert('Paste some bill text first.');return;}
+  const apiKey=getApiKey();
+  if(!apiKey){alert('Add your Anthropic API key in Settings first.');switchTab('settings');return;}
+  const btn=document.getElementById('parse-btn');
+  const status=document.getElementById('parse-status');
+  btn.disabled=true;status.style.display='inline';
+  try{
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1500,
+        messages:[{role:'user',content:`Today is ${td()}. Extract all bill/payment alerts from this text. Return ONLY a JSON array, no markdown. Each item: {"name":"string","category":"Utilities|Insurance|Auto Loan|Credit Card|Software|Phone|Rent|Internet|Other","amount":number_or_null,"balance":number_or_null,"dueDate":"YYYY-MM-DD or null","status":"Unpaid|Past Due","notes":"brief note or empty string"}. amount = payment due amount. balance = total account balance if mentioned. No $ symbols in numbers.\nText:\n${text}`}]})
+    });
+    const data=await resp.json();
+    if(data.error){throw new Error(data.error.message);}
+    let raw=data.content.find(c=>c.type==='text')?.text||'[]';
+    raw=raw.replace(/```json|```/g,'').trim();
+    parsedItems=JSON.parse(raw);
+    showParsed();
+  }catch(e){
+    alert('Parse failed: '+e.message);
+  }
+  btn.disabled=false;status.style.display='none';
+}
+
+function showParsed(){
+  if(!parsedItems.length){document.getElementById('parse-result').style.display='none';return;}
+  document.getElementById('parsed-rows').innerHTML=parsedItems.map(i=>`
+    <div class="parsed-item">
+      <div>
+        <div class="parsed-name">${i.name}</div>
+        <div class="parsed-meta">${i.category}${i.amount?' · Due: $'+parseFloat(i.amount).toFixed(2):''}${i.balance?' · Balance: $'+parseFloat(i.balance).toFixed(2):''}${i.dueDate?' · '+fmtDate(i.dueDate):''}</div>
+      </div>
+      <span class="badge ${i.status==='Past Due'?'badge-red':'badge-amber'}">${i.status}</span>
+    </div>`).join('');
+  document.getElementById('parsed-count').textContent=parsedItems.length+' bill'+(parsedItems.length>1?'s':'')+' found';
+  document.getElementById('parse-result').style.display='block';
+}
+
+function confirmParsed(){
+  const t=td();
+  parsedItems.forEach(i=>{
+    const bill={
+      id:Date.now()+Math.random().toString(36).slice(2),
+      name:i.name,category:i.category||'Other',
+      amount:i.amount||null,balance:i.balance||null,
+      dueDate:i.dueDate||null,status:i.status||'Unpaid',
+      notes:i.notes||'',loggedAt:t,paid:false,deleted:false
+    };
+    bills.push(bill);
+    pushToSheet('add',{bill});
+  });
+  saveBills();render();
+  document.getElementById('paste-input').value='';
+  document.getElementById('parse-result').style.display='none';
+  parsedItems=[];
+  switchTab('dashboard');
+}
+
+function addManual(){
+  const name=document.getElementById('m-name').value.trim();
+  if(!name){alert('Bill name is required.');return;}
+  const bill={
+    id:Date.now()+Math.random().toString(36).slice(2),
+    name,category:document.getElementById('m-cat').value,
+    amount:parseFloat(document.getElementById('m-amount').value)||null,
+    balance:parseFloat(document.getElementById('m-balance').value)||null,
+    dueDate:document.getElementById('m-due').value||null,
+    status:document.getElementById('m-status').value,
+    notes:document.getElementById('m-notes').value.trim(),
+    loggedAt:td(),paid:false,deleted:false
+  };
+  bills.push(bill);
+  saveBills();render();
+  pushToSheet('add',{bill});
+  ['m-name','m-amount','m-balance','m-due','m-notes'].forEach(id=>document.getElementById(id).value='');
+  const msg=document.getElementById('manual-msg');
+  msg.style.display='block';
+  setTimeout(()=>msg.style.display='none',2500);
+}
+
+loadBills();
+</script>
+</body>
+</html>
