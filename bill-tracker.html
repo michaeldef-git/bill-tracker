@@ -375,7 +375,7 @@ function rowHTML(b, mode){
       </div>
       <div class="bill-amounts">
         ${amountHTML}
-        <div class="bill-due">Due ${fmtDate(b.dueDate)}${b.dueDate?" ("+calcDays(b.dueDate)+" days)":""}</div>
+        <div class="bill-due" style="${!b.dueDate?'color:#7c3aed':''}">${b.dueDate?"Due "+fmtDate(b.dueDate)+" ("+calcDays(b.dueDate)+" days)":"Due ???"}</div>
       </div>
     </div>
     <div class="bill-mid">
