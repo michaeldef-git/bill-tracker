@@ -314,8 +314,7 @@ function getPriLabel(b){
   if(d<0) return 'Overdue';
   if(d===0) return 'Due today';
   if(d===1) return 'Due tomorrow';
-  if(d<=2) return 'Due soon';
-  if(d<=7) return 'This week';
+  if(d<=7) return 'Due soon';
   return '';
 }
 
@@ -373,9 +372,9 @@ function rowHTML(b, mode){
   }
 
   let acts='';
-  const hasPartial = b.notes && b.notes.includes('Partial');
-  const editPartialBtn = hasPartial ? `<button class="action-btn" onclick="togglePartial('${b.id}', true)">Edit partial</button>` : '';
-  if(mode==='open') acts=`<div class="btn-row"><button class="action-btn" onclick="toggleEdit('${b.id}')">Edit</button><button class="action-btn" onclick="togglePartial('${b.id}')">Partial</button>${editPartialBtn}<button class="action-btn" onclick="markPaid('${b.id}')">Mark paid</button><button class="del-btn" onclick="reqDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')">Delete</button></div>`;
+  const hasPartial = b.notes && b.notes.includes('Payment');
+  const editPartialBtn = hasPartial ? `<button class="action-btn" onclick="togglePartial('${b.id}', true)">Edit payment</button>` : '';
+  if(mode==='open') acts=`<div class="btn-row"><button class="action-btn" onclick="toggleEdit('${b.id}')">Edit</button><button class="action-btn" onclick="togglePartial('${b.id}')">Payment</button>${editPartialBtn}<button class="action-btn" onclick="markPaid('${b.id}')">Mark paid</button><button class="del-btn" onclick="reqDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')">Delete</button></div>`;
   else if(mode==='paid') acts=`<div class="btn-row"><button class="action-btn" onclick="toggleEdit('${b.id}')">Edit</button><button class="action-btn" onclick="markUnpaid('${b.id}')">Unpay</button><button class="del-btn" onclick="reqDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')">Delete</button></div>`;
   else if(mode==='deleted') acts=`<div class="btn-row"><button class="action-btn" onclick="restoreBill('${b.id}')">Restore</button><button class="del-btn" onclick="permanentDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')" style="color:#c0392b;border-color:#f0d0d0">Perm. delete</button></div>`;
 
@@ -401,7 +400,7 @@ function rowHTML(b, mode){
       ${b.deletedAt?`<span>Deleted ${fmtDate(b.deletedAt)}</span>`:''}
     </div>
     <div class="edit-form" id="pf-${b.id}" style="border-top:1px solid #f0f0f0;margin-top:12px;padding-top:12px;display:none">
-      <div style="font-size:12px;font-weight:600;color:#666;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px" id="pf-title-${b.id}">Log Partial Payment</div>
+      <div style="font-size:12px;font-weight:600;color:#666;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px" id="pf-title-${b.id}">Log Payment</div>
       <div class="edit-grid" style="margin-bottom:10px">
         <div class="ef-field"><label>Amount paid ($)</label><input type="number" id="pp-amt-${b.id}" step="0.01" placeholder="0.00"></div>
         <div class="ef-field"><label>Date paid</label><input type="date" id="pp-date-${b.id}" value="${new Date().toISOString().split('T')[0]}"></div>
@@ -448,16 +447,16 @@ function togglePartial(id, editMode){
   const title=document.getElementById('pf-title-'+id);
   const prevWrap=document.getElementById('pp-prev-wrap-'+id);
   if(editMode){
-    title.textContent='Edit Last Partial Payment';
+    title.textContent='Edit Last Payment';
     prevWrap.style.display='block';
     // Pre-fill with last partial from notes
     const b=bills.find(x=>x.id===id);
     if(b&&b.notes){
-      const match=b.notes.match(/Partial \$([0-9.]+) paid/);
+      const match=b.notes.match(/Payment \$([0-9.]+) paid/);
       if(match) document.getElementById('pp-prev-'+id).value=match[1];
     }
   } else {
-    title.textContent='Log Partial Payment';
+    title.textContent='Log Payment';
     prevWrap.style.display='none';
     document.getElementById('pp-amt-'+id).value='';
   }
@@ -476,13 +475,13 @@ function savePartial(id){
   // If editing, reverse previous partial first
   if(prevAmt>0) b.amount=parseFloat(b.amount||0)+prevAmt;
   // Apply new partial
-  if(b.amount!==null&&b.amount!==undefined) b.amount=Math.max(0,parseFloat(b.amount)-amtPaid);
+  if(b.amount!==null&&b.amount!==undefined) b.amount=parseFloat((parseFloat(b.amount)-amtPaid).toFixed(2));
   // Update due date if provided
   if(newDue) b.dueDate=newDue;
   // Update note — replace last partial note if editing, otherwise append
-  const newNote='Partial $'+amtPaid.toFixed(2)+' paid '+displayDate;
+  const newNote='Payment $'+amtPaid.toFixed(2)+' paid '+displayDate;
   if(prevAmt>0){
-    b.notes=(b.notes||'').replace(/Partial \$[0-9.]+ paid [0-9.]+/,newNote);
+    b.notes=(b.notes||'').replace(/Payment \$[0-9.]+ paid [0-9.]+/,newNote);
   } else {
     b.notes=b.notes?b.notes+' | '+newNote:newNote;
   }
