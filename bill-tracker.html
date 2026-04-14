@@ -367,7 +367,8 @@ function rowHTML(b, mode){
   }
   if(avail){
     amountHTML+=`<div class="bill-balance">Avail: ${avail}</div>`;
-  } else {
+  }
+  if(!amountHTML){
     amountHTML=`<div class="missing-amt">amount unknown</div>`;
   }
 
@@ -536,7 +537,7 @@ function render(){
   document.getElementById('m-urgent-amt').textContent=urgentAmt>0?'$'+urgentAmt.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'';
   document.getElementById('m-week').textContent=weekBills.length;
   document.getElementById('m-week-amt').textContent=weekAmt>0?'$'+weekAmt.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'';
-  document.getElementById('m-count').textContent=bills.filter(b=>!b.deleted).length;
+  document.getElementById('m-count').textContent=open.length;
 }
 
 function switchTab(t){
