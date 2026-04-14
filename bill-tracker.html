@@ -370,7 +370,7 @@ function rowHTML(b, mode){
   }
 
   let acts='';
-  if(mode==='open') acts=`<div class="btn-row"><button class="action-btn" onclick="toggleEdit('${b.id}')">Edit</button><button class="action-btn" onclick="markPaid('${b.id}')">Mark paid</button><button class="del-btn" onclick="reqDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')">Delete</button></div>`;
+  if(mode==='open') acts=`<div class="btn-row"><button class="action-btn" onclick="toggleEdit('${b.id}')">Edit</button><button class="action-btn" onclick="togglePartial('${b.id}')">Partial</button><button class="action-btn" onclick="markPaid('${b.id}')">Mark paid</button><button class="del-btn" onclick="reqDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')">Delete</button></div>`;
   else if(mode==='paid') acts=`<div class="btn-row"><button class="action-btn" onclick="toggleEdit('${b.id}')">Edit</button><button class="action-btn" onclick="markUnpaid('${b.id}')">Unpay</button><button class="del-btn" onclick="reqDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')">Delete</button></div>`;
   else if(mode==='deleted') acts=`<div class="btn-row"><button class="action-btn" onclick="restoreBill('${b.id}')">Restore</button><button class="del-btn" onclick="permanentDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')" style="color:#c0392b;border-color:#f0d0d0">Perm. delete</button></div>`;
 
@@ -394,6 +394,17 @@ function rowHTML(b, mode){
       <span>Logged ${fmtDate(b.loggedAt)}</span>
       ${b.paidOn?`<span>Paid on ${fmtDate(b.paidOn)}</span>`:''}
       ${b.deletedAt?`<span>Deleted ${fmtDate(b.deletedAt)}</span>`:''}
+    </div>
+    <div class="edit-form" id="pf-${b.id}" style="border-top:1px solid #f0f0f0;margin-top:12px;padding-top:12px;display:none">
+      <div style="font-size:12px;font-weight:600;color:#666;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">Log Partial Payment</div>
+      <div class="edit-grid" style="margin-bottom:10px">
+        <div class="ef-field"><label>Amount paid ($)</label><input type="number" id="pp-amt-${b.id}" step="0.01" placeholder="0.00"></div>
+        <div class="ef-field"><label>New due date</label><input type="date" id="pp-due-${b.id}" value="${b.dueDate||''}"></div>
+      </div>
+      <div class="ef-actions">
+        <button class="btn-cancel" onclick="togglePartial('${b.id}')">Cancel</button>
+        <button class="btn-save" onclick="savePartial('${b.id}')">Save + sync</button>
+      </div>
     </div>
     <div class="edit-form" id="ef-${b.id}">
       <div class="edit-grid" style="margin-bottom:10px">
@@ -420,6 +431,32 @@ function toggleEdit(id){
   const open=ef.classList.contains('open');
   ef.classList.toggle('open',!open);
   row.classList.toggle('editing',!open);
+}
+
+function togglePartial(id){
+  const pf=document.getElementById('pf-'+id);
+  const open=pf.style.display==='block';
+  pf.style.display=open?'none':'block';
+}
+
+function savePartial(id){
+  const b=bills.find(x=>x.id===id);
+  if(!b) return;
+  const amtPaid=parseFloat(document.getElementById('pp-amt-'+id).value);
+  const newDue=document.getElementById('pp-due-'+id).value||null;
+  if(!amtPaid||amtPaid<=0){alert('Enter a valid amount paid.');return;}
+  const today=td();
+  // Update remaining amount
+  if(b.amount) b.amount=Math.max(0,parseFloat(b.amount)-amtPaid);
+  // Update due date if provided
+  if(newDue) b.dueDate=newDue;
+  // Append note
+  const note='Partial $'+amtPaid.toFixed(2)+' paid '+fmtDate(today);
+  b.notes=b.notes?b.notes+' | '+note:note;
+  b.status=autoStatus(b.dueDate, 'Unpaid');
+  saveBills();render();
+  pushToSheet('update',{bill:b});
+  document.getElementById('pf-'+id).style.display='none';
 }
 
 function saveEdit(id){
