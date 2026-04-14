@@ -447,10 +447,6 @@ function render(){
   if(currentFilter==='week') filt=open.filter(b=>['red','amber'].includes(getPri(b)));
   if(currentFilter==='missing') filt=open.filter(b=>!b.amount&&!b.balance);
   filt.sort((a,b)=>{
-    const o={red:0,amber:1,green:2,gray:3};
-    const priDiff=(o[getPri(a)]||3)-(o[getPri(b)]||3);
-    if(priDiff!==0) return priDiff;
-    // Within same priority, ascending days (fewest days first)
     const dA=a.dueDate?calcDays(a.dueDate):9999;
     const dB=b.dueDate?calcDays(b.dueDate):9999;
     return dA-dB;
