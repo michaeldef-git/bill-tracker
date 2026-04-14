@@ -248,10 +248,10 @@ async function pushToSheet(action, data){
   if(!webhook) return;
   setSyncStatus('syncing','Syncing...');
   try{
-    await fetch(webhook,{
+    await fetch('https://bill-tracker-proxy.michaeldef.workers.dev/sheets',{
       method:'POST',
-      headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({action,...data})
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action,...data,webhook})
     });
     setSyncStatus('ok','Synced '+new Date().toLocaleTimeString());
   }catch(e){
@@ -264,10 +264,10 @@ async function syncAll(){
   if(!webhook){alert('Add your webhook URL in Settings first.');return;}
   setSyncStatus('syncing','Syncing all bills...');
   try{
-    const resp=await fetch(webhook,{
+    const resp=await fetch('https://bill-tracker-proxy.michaeldef.workers.dev/sheets',{
       method:'POST',
-      headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({action:'sync',bills:bills.filter(b=>!b.deleted)})
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'sync',bills:bills.filter(b=>!b.deleted),webhook})
     });
     const text=await resp.text();
     setSyncStatus('ok','Full sync complete '+new Date().toLocaleTimeString());
@@ -399,6 +399,7 @@ function rowHTML(b, mode){
       <div style="font-size:12px;font-weight:600;color:#666;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">Log Partial Payment</div>
       <div class="edit-grid" style="margin-bottom:10px">
         <div class="ef-field"><label>Amount paid ($)</label><input type="number" id="pp-amt-${b.id}" step="0.01" placeholder="0.00"></div>
+        <div class="ef-field"><label>Date paid</label><input type="date" id="pp-date-${b.id}" value="${new Date().toISOString().split('T')[0]}"></div>
         <div class="ef-field"><label>New due date</label><input type="date" id="pp-due-${b.id}" value="${b.dueDate||''}"></div>
       </div>
       <div class="ef-actions">
@@ -443,15 +444,16 @@ function savePartial(id){
   const b=bills.find(x=>x.id===id);
   if(!b) return;
   const amtPaid=parseFloat(document.getElementById('pp-amt-'+id).value);
+  const datePaid=document.getElementById('pp-date-'+id).value||null;
   const newDue=document.getElementById('pp-due-'+id).value||null;
   if(!amtPaid||amtPaid<=0){alert('Enter a valid amount paid.');return;}
-  const today=td();
+  const displayDate=datePaid?fmtDate(datePaid):fmtDate(td());
   // Update remaining amount
   if(b.amount) b.amount=Math.max(0,parseFloat(b.amount)-amtPaid);
   // Update due date if provided
   if(newDue) b.dueDate=newDue;
   // Append note
-  const note='Partial $'+amtPaid.toFixed(2)+' paid '+fmtDate(today);
+  const note='Partial $'+amtPaid.toFixed(2)+' paid '+displayDate;
   b.notes=b.notes?b.notes+' | '+note:note;
   b.status=autoStatus(b.dueDate, 'Unpaid');
   saveBills();render();
@@ -470,8 +472,9 @@ function saveEdit(id){
   b.status=document.getElementById('es-'+id).value;
   b.availCredit=document.getElementById('eav-'+id).value!==''?parseFloat(document.getElementById('eav-'+id).value):null;
   b.notes=document.getElementById('eno-'+id).value.trim();
+  b.status=autoStatus(b.dueDate, b.status);
   saveBills();render();
-  pushToSheet('unpaid',{bill:b});
+  pushToSheet('update',{bill:b});
 }
 
 function render(){
