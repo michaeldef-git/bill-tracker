@@ -478,15 +478,14 @@ function markUnpaid(id){
 async function parseBills(){
   const text=document.getElementById('paste-input').value.trim();
   if(!text){alert('Paste some bill text first.');return;}
-  const apiKey=getApiKey();
-  if(!apiKey){alert('Add your Anthropic API key in Settings first.');switchTab('settings');return;}
+  
   const btn=document.getElementById('parse-btn');
   const status=document.getElementById('parse-status');
   btn.disabled=true;status.style.display='inline';
   try{
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+    const resp=await fetch('https://bill-tracker-proxy.michaeldef.workers.dev',{
       method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01'},
+      headers:{'Content-Type':'application/json'},
       body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1500,
         messages:[{role:'user',content:`Today is ${td()}. Extract all bill/payment alerts from this text. Return ONLY a JSON array, no markdown. Each item: {"name":"string","category":"Utilities|Insurance|Auto Loan|Credit Card|Software|Phone|Rent|Internet|Other","amount":number_or_null,"balance":number_or_null,"dueDate":"YYYY-MM-DD or null","status":"Unpaid|Past Due","notes":"brief note or empty string"}. amount = payment due amount. balance = total account balance if mentioned. No $ symbols in numbers.\nText:\n${text}`}]})
     });
