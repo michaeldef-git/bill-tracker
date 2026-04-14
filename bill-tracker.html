@@ -171,7 +171,8 @@ textarea{min-height:110px;resize:vertical;line-height:1.5}
         <div class="ef-field"><label>Due date</label><input type="date" id="m-due"></div>
         <div class="ef-field"><label>Status</label><select id="m-status"><option>Unpaid</option><option>Past Due</option></select></div>
       </div>
-      <div class="ef-field" style="margin-bottom:12px"><label>Notes</label><input type="text" id="m-notes" placeholder="Optional"></div>
+      <div class="ef-field"><label>Avail credit ($)</label><input type="number" id="m-avail" placeholder="0.00" step="0.01"></div>
+      <div class="ef-field" style="margin-bottom:12px;grid-column:1/-1"><label>Notes</label><input type="text" id="m-notes" placeholder="Optional"></div>
       <button class="btn-primary" onclick="addManual()">Add bill</button>
       <div id="manual-msg" style="font-size:13px;margin-top:10px;color:green;display:none">Added and synced to sheet!</div>
     </div>
@@ -316,9 +317,19 @@ function getPriLabel(b){
 
 function fmtDate(d){
   if(!d) return '—';
-  return new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  const dt=new Date(d+'T12:00:00');
+  const day=String(dt.getDate()).padStart(2,'0');
+  const mon=String(dt.getMonth()+1).padStart(2,'0');
+  const yr=String(dt.getFullYear()).slice(-2);
+  return day+'.'+mon+'.'+yr;
 }
 
+function calcDays(d){
+  if(!d) return '';
+  const today=new Date(); today.setHours(0,0,0,0);
+  const due=new Date(d+'T00:00:00');
+  return Math.ceil((due-today)/86400000);
+}
 function fmtAmt(a){
   if(!a||a==0) return null;
   return '$'+parseFloat(a).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -333,6 +344,7 @@ function rowHTML(b, mode){
   const bc={red:'badge-red',amber:'badge-amber',green:'badge-green',gray:'badge-gray'}[pri];
   const payment=fmtAmt(b.amount);
   const balance=fmtAmt(b.balance);
+  const avail=fmtAmt(b.availCredit);
   const rc=mode==='paid'?'paid-card':mode==='deleted'?'deleted-card':'';
 
   let amountHTML='';
@@ -342,6 +354,9 @@ function rowHTML(b, mode){
     amountHTML=`<div class="bill-payment">${payment}</div>`;
   } else if(balance){
     amountHTML=`<div class="bill-balance">Balance: ${balance}</div>`;
+  }
+  if(avail){
+    amountHTML+=`<div class="bill-balance">Avail: ${avail}</div>`;
   } else {
     amountHTML=`<div class="missing-amt">amount unknown</div>`;
   }
@@ -349,7 +364,7 @@ function rowHTML(b, mode){
   let acts='';
   if(mode==='open') acts=`<div class="btn-row"><button class="action-btn" onclick="toggleEdit('${b.id}')">Edit</button><button class="action-btn" onclick="markPaid('${b.id}')">Mark paid</button><button class="del-btn" onclick="reqDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')">Delete</button></div>`;
   else if(mode==='paid') acts=`<div class="btn-row"><button class="action-btn" onclick="toggleEdit('${b.id}')">Edit</button><button class="action-btn" onclick="markUnpaid('${b.id}')">Unpay</button><button class="del-btn" onclick="reqDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')">Delete</button></div>`;
-  else if(mode==='deleted') acts=`<div class="btn-row"><button class="action-btn" onclick="restoreBill('${b.id}')">Restore</button></div>`;
+  else if(mode==='deleted') acts=`<div class="btn-row"><button class="action-btn" onclick="restoreBill('${b.id}')">Restore</button><button class="del-btn" onclick="permanentDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')" style="color:#c0392b;border-color:#f0d0d0">Perm. delete</button></div>`;
 
   return `<div class="bill-card ${rc}" id="row-${b.id}">
     <div class="bill-top">
@@ -360,7 +375,7 @@ function rowHTML(b, mode){
       </div>
       <div class="bill-amounts">
         ${amountHTML}
-        <div class="bill-due">Due ${fmtDate(b.dueDate)}</div>
+        <div class="bill-due">Due ${fmtDate(b.dueDate)}${b.dueDate?" ("+calcDays(b.dueDate)+" days)":""}</div>
       </div>
     </div>
     <div class="bill-mid">
@@ -369,7 +384,7 @@ function rowHTML(b, mode){
     </div>
     <div class="bill-footer">
       <span>Logged ${fmtDate(b.loggedAt)}</span>
-      ${b.paidAt?`<span>Paid ${fmtDate(b.paidAt)}</span>`:''}
+      ${b.paidOn?`<span>Paid on ${fmtDate(b.paidOn)}</span>`:''}
       ${b.deletedAt?`<span>Deleted ${fmtDate(b.deletedAt)}</span>`:''}
     </div>
     <div class="edit-form" id="ef-${b.id}">
@@ -378,6 +393,7 @@ function rowHTML(b, mode){
         <div class="ef-field"><label>Category</label><select id="ec-${b.id}">${catOpts(b.category)}</select></div>
         <div class="ef-field"><label>Payment due ($)</label><input type="number" id="ea-${b.id}" value="${b.amount||''}" step="0.01" placeholder="0.00"></div>
         <div class="ef-field"><label>Balance ($)</label><input type="number" id="eb-${b.id}" value="${b.balance||''}" step="0.01" placeholder="0.00"></div>
+        <div class="ef-field"><label>Avail credit ($)</label><input type="number" id="eav-${b.id}" value="${b.availCredit||''}" step="0.01" placeholder="0.00"></div>
         <div class="ef-field"><label>Due date</label><input type="date" id="ed-${b.id}" value="${b.dueDate||''}"></div>
         <div class="ef-field"><label>Status</label><select id="es-${b.id}"><option value="Unpaid"${b.status==='Unpaid'?' selected':''}>Unpaid</option><option value="Past Due"${b.status==='Past Due'?' selected':''}>Past due</option></select></div>
       </div>
@@ -407,9 +423,10 @@ function saveEdit(id){
   b.dueDate=document.getElementById('ed-'+id).value||null;
   b.category=document.getElementById('ec-'+id).value;
   b.status=document.getElementById('es-'+id).value;
+  b.availCredit=document.getElementById('eav-'+id).value!==''?parseFloat(document.getElementById('eav-'+id).value):null;
   b.notes=document.getElementById('eno-'+id).value.trim();
   saveBills();render();
-  pushToSheet('update',{bill:b});
+  pushToSheet('unpaid',{bill:b});
 }
 
 function render(){
@@ -455,24 +472,37 @@ function reqDelete(id,name){
 }
 function closeModal(){pendingDeleteId=null;document.getElementById('confirm-modal').style.display='none';}
 function confirmDelete(){
+  if(pendingDeletePermanent){
+    bills=bills.filter(x=>x.id!==pendingDeleteId);
+    saveBills();render();closeModal();
+    pushToSheet('permanentDelete',{bill:{id:pendingDeleteId}});
+    pendingDeletePermanent=false;
+    return;
+  }
   const b=bills.find(x=>x.id===pendingDeleteId);
   if(b){b.deleted=true;b.deletedAt=td();}
   saveBills();render();closeModal();
   if(b) pushToSheet('delete',{bill:b});
 }
+function permanentDelete(id,name){
+  pendingDeleteId=id;
+  pendingDeletePermanent=true;
+  document.getElementById('modal-msg').textContent=`Permanently delete "${name}"? This cannot be undone.`;
+  document.getElementById('confirm-modal').style.display='block';
+}
 function restoreBill(id){
   const b=bills.find(x=>x.id===id);
   if(b){b.deleted=false;delete b.deletedAt;}
   saveBills();render();
-  if(b) pushToSheet('update',{bill:b});
+  if(b) pushToSheet('restore',{bill:b});
 }
 function markPaid(id){
   const b=bills.find(x=>x.id===id);
-  if(b){b.paid=true;b.paidAt=td();saveBills();render();pushToSheet('paid',{bill:b});}
+  if(b){b.paid=true;b.paidOn=td();saveBills();render();pushToSheet('paid',{bill:b});}
 }
 function markUnpaid(id){
   const b=bills.find(x=>x.id===id);
-  if(b){b.paid=false;delete b.paidAt;saveBills();render();pushToSheet('update',{bill:b});}
+  if(b){b.paid=false;delete b.paidOn;saveBills();render();pushToSheet('unpaid',{bill:b});}
 }
 
 async function parseBills(){
@@ -521,7 +551,7 @@ function confirmParsed(){
     const bill={
       id:Date.now()+Math.random().toString(36).slice(2),
       name:i.name,category:i.category||'Other',
-      amount:i.amount||null,balance:i.balance||null,
+      amount:i.amount!==null&&i.amount!==undefined?i.amount:null,balance:i.balance!==null&&i.balance!==undefined?i.balance:null,availCredit:null,
       dueDate:i.dueDate||null,status:i.status||'Unpaid',
       notes:i.notes||'',loggedAt:t,paid:false,deleted:false
     };
@@ -541,8 +571,8 @@ function addManual(){
   const bill={
     id:Date.now()+Math.random().toString(36).slice(2),
     name,category:document.getElementById('m-cat').value,
-    amount:parseFloat(document.getElementById('m-amount').value)||null,
-    balance:parseFloat(document.getElementById('m-balance').value)||null,
+    amount:document.getElementById('m-amount').value!==''?parseFloat(document.getElementById('m-amount').value):null,availCredit:document.getElementById('m-avail').value!==''?parseFloat(document.getElementById('m-avail').value):null,
+    balance:document.getElementById('m-balance').value!==''?parseFloat(document.getElementById('m-balance').value):null,
     dueDate:document.getElementById('m-due').value||null,
     status:document.getElementById('m-status').value,
     notes:document.getElementById('m-notes').value.trim(),
@@ -551,7 +581,7 @@ function addManual(){
   bills.push(bill);
   saveBills();render();
   pushToSheet('add',{bill});
-  ['m-name','m-amount','m-balance','m-due','m-notes'].forEach(id=>document.getElementById(id).value='');
+  ['m-name','m-amount','m-balance','m-avail','m-due','m-notes'].forEach(id=>document.getElementById(id).value='');
   const msg=document.getElementById('manual-msg');
   msg.style.display='block';
   setTimeout(()=>msg.style.display='none',2500);
