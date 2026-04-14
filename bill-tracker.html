@@ -439,7 +439,13 @@ function render(){
   if(currentFilter==='urgent') filt=open.filter(b=>getPri(b)==='red');
   if(currentFilter==='week') filt=open.filter(b=>['red','amber'].includes(getPri(b)));
   if(currentFilter==='missing') filt=open.filter(b=>!b.amount&&!b.balance);
-  filt.sort((a,b)=>{const o={red:0,amber:1,green:2,gray:3};return(o[getPri(a)]||3)-(o[getPri(b)]||3);});
+  filt.sort((a,b)=>{
+    const o={red:0,amber:1,green:2,gray:3};
+    const priDiff=(o[getPri(a)]||3)-(o[getPri(b)]||3);
+    if(priDiff!==0) return priDiff;
+    // Within same priority, most recently logged first
+    return (b.loggedAt||'').localeCompare(a.loggedAt||'');
+  });
 
   document.getElementById('bills-list').innerHTML=filt.length?filt.map(b=>rowHTML(b,'open')).join(''):'<div class="empty-state">No bills match this filter.</div>';
   document.getElementById('paid-list').innerHTML=paid.length?paid.map(b=>rowHTML(b,'paid')).join(''):'<div class="empty-state">No paid bills yet.</div>';
