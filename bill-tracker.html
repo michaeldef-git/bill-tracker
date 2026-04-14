@@ -220,6 +220,7 @@ let bills = [];
 let parsedItems = [];
 let currentFilter = 'all';
 let pendingDeleteId = null;
+let pendingDeletePermanent = false;
 
 function getApiKey(){ return localStorage.getItem('bt_apikey')||''; }
 function getWebhook(){ return localStorage.getItem('bt_webhook')||'https://script.google.com/macros/s/AKfycbwUJUpFKPzcsjHIhRSciJsSu0F97dIlTcdHcYptrq6-GQ2mvz3DEBUpr3pwjVKunmML/exec'; }
