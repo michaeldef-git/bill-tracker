@@ -20,6 +20,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .metric{background:#fff;border-radius:10px;padding:12px 14px;border:1px solid #e5e5e5}
 .metric-label{font-size:11px;color:#888;margin-bottom:4px}
 .metric-value{font-size:20px;font-weight:600}
+.metric-amt{font-size:11px;color:#888;margin-top:2px;min-height:14px}
 .metric-value.red{color:#c0392b}
 .metric-value.amber{color:#d68910}
 .tabs{display:flex;gap:0;border-bottom:1px solid #e5e5e5;margin-bottom:16px;background:#fff;border-radius:10px 10px 0 0;overflow-x:auto;-webkit-overflow-scrolling:touch}
@@ -117,8 +118,8 @@ textarea{min-height:110px;resize:vertical;line-height:1.5}
 <div class="container">
   <div class="metrics">
     <div class="metric"><div class="metric-label">Total owed</div><div class="metric-value" id="m-total">$0.00</div></div>
-    <div class="metric"><div class="metric-label">Urgent</div><div class="metric-value red" id="m-urgent">0</div></div>
-    <div class="metric"><div class="metric-label">Due this week</div><div class="metric-value amber" id="m-week">0</div></div>
+    <div class="metric"><div class="metric-label">Urgent</div><div class="metric-value red" id="m-urgent">0</div><div class="metric-amt" id="m-urgent-amt"></div></div>
+    <div class="metric"><div class="metric-label">Due this week</div><div class="metric-value amber" id="m-week">0</div><div class="metric-amt" id="m-week-amt"></div></div>
     <div class="metric"><div class="metric-label">Bills tracked</div><div class="metric-value" id="m-count">0</div></div>
   </div>
 
@@ -469,7 +470,7 @@ function render(){
   document.getElementById('m-urgent-amt').textContent=urgentAmt>0?'$'+urgentAmt.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'';
   document.getElementById('m-week').textContent=weekBills.length;
   document.getElementById('m-week-amt').textContent=weekAmt>0?'$'+weekAmt.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'';
-  document.getElementById('m-count').textContent=open.length;
+  document.getElementById('m-count').textContent=bills.filter(b=>!b.deleted).length;
 }
 
 function switchTab(t){
