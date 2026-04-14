@@ -347,6 +347,7 @@ function rowHTML(b, mode){
   const balance=fmtAmt(b.balance);
   const avail=fmtAmt(b.availCredit);
   const rc=mode==='paid'?'paid-card':mode==='deleted'?'deleted-card':'';
+  const showBadge=mode==='open';
 
   let amountHTML='';
   if(payment&&balance){
@@ -364,8 +365,8 @@ function rowHTML(b, mode){
 
   let acts='';
   if(mode==='open') acts=`<div class="btn-row"><button class="action-btn" onclick="toggleEdit('${b.id}')">Edit</button><button class="action-btn" onclick="markPaid('${b.id}')">Mark paid</button><button class="del-btn" onclick="reqDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')">Delete</button></div>`;
-  else if(mode==='paid') acts=`<div class="btn-row"><button class="action-btn" onclick="toggleEdit('${b.id}')">Edit</button><button class="action-btn" onclick="markUnpaid('${b.id}')">Unpay</button><button class="del-btn" onclick="reqDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')">Delete</button></div>`;
-  else if(mode==='deleted') acts=`<div class="btn-row"><button class="action-btn" onclick="restoreBill('${b.id}')">Restore</button><button class="del-btn" onclick="permanentDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')" style="color:#c0392b;border-color:#f0d0d0">Perm. delete</button></div>`;
+  else if(mode==='paid') acts=`<div class="btn-row"><button class="action-btn" onclick="toggleEdit('${b.id}')">Edit</button><button class="action-btn" onclick="markUnpaid('${b.id}')">Move to unpaid</button></div>`;
+  else if(mode==='deleted') acts=`<div class="btn-row"><button class="action-btn" onclick="restoreBill('${b.id}')">Restore</button><button class="del-btn" onclick="permanentDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')">Perm. delete</button></div>`;
 
   return `<div class="bill-card ${rc}" id="row-${b.id}">
     <div class="bill-top">
@@ -380,12 +381,12 @@ function rowHTML(b, mode){
       </div>
     </div>
     <div class="bill-mid">
-      ${lbl?`<span class="badge ${bc}">${lbl}</span>`:'<span></span>'}
+      ${showBadge&&lbl?`<span class="badge ${bc}">${lbl}</span>`:'<span></span>'}
       ${acts}
     </div>
     <div class="bill-footer">
       <span>Logged ${fmtDate(b.loggedAt)}</span>
-      ${b.paidOn?`<span>Paid on ${fmtDate(b.paidOn)}</span>`:''}
+      ${b.paidOn?`<span style="color:var(--color-text-success,#155724);font-weight:500">Paid ${fmtDate(b.paidOn)}</span>`:''}
       ${b.deletedAt?`<span>Deleted ${fmtDate(b.deletedAt)}</span>`:''}
     </div>
     <div class="edit-form" id="ef-${b.id}">
@@ -443,12 +444,15 @@ function render(){
     const o={red:0,amber:1,green:2,gray:3};
     const priDiff=(o[getPri(a)]||3)-(o[getPri(b)]||3);
     if(priDiff!==0) return priDiff;
-    // Within same priority, most recently logged first
-    return (b.loggedAt||'').localeCompare(a.loggedAt||'');
+    // Within same priority, ascending days (fewest days first)
+    const da=a.dueDate?calcDays(a.dueDate):9999;
+    const db=b.dueDate?calcDays(b.dueDate):9999;
+    return da-db;
   });
 
   document.getElementById('bills-list').innerHTML=filt.length?filt.map(b=>rowHTML(b,'open')).join(''):'<div class="empty-state">No bills match this filter.</div>';
-  document.getElementById('paid-list').innerHTML=paid.length?paid.map(b=>rowHTML(b,'paid')).join(''):'<div class="empty-state">No paid bills yet.</div>';
+  const paidSorted=[...paid].sort((a,b)=>(b.paidOn||'').localeCompare(a.paidOn||''));
+  document.getElementById('paid-list').innerHTML=paidSorted.length?paidSorted.map(b=>rowHTML(b,'paid')).join(''):'<div class="empty-state">No paid bills yet.</div>';
   document.getElementById('deleted-list').innerHTML=del.length?del.map(b=>rowHTML(b,'deleted')).join(''):'<div class="empty-state">No deleted bills.</div>';
 
   const owed=open.filter(b=>b.amount).reduce((s,b)=>s+parseFloat(b.amount),0);
