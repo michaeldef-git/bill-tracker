@@ -267,7 +267,7 @@ async function syncAll(){
     const resp=await fetch('https://bill-tracker-proxy.michaeldef.workers.dev/sheets',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'sync',bills:bills.filter(b=>!b.deleted),webhook})
+      body:JSON.stringify({action:'sync',bills:bills.filter(b=>!b.deleted).map(b=>({...b,status:autoStatus(b.dueDate,b.status)})),webhook})
     });
     const text=await resp.text();
     setSyncStatus('ok','Full sync complete '+new Date().toLocaleTimeString());
@@ -285,6 +285,8 @@ function loadBills(){
     const raw=localStorage.getItem(STORAGE_KEY);
     if(raw) bills=JSON.parse(raw);
   }catch(e){bills=[];}
+  // Auto-correct stale statuses on every load
+  bills.forEach(b=>{ if(!b.paid&&!b.deleted) b.status=autoStatus(b.dueDate,b.status); });
   document.getElementById('api-key-input').value=getApiKey();
   document.getElementById('webhook-input').value=getWebhook();
   render();
@@ -370,7 +372,9 @@ function rowHTML(b, mode){
   }
 
   let acts='';
-  if(mode==='open') acts=`<div class="btn-row"><button class="action-btn" onclick="toggleEdit('${b.id}')">Edit</button><button class="action-btn" onclick="togglePartial('${b.id}')">Partial</button><button class="action-btn" onclick="markPaid('${b.id}')">Mark paid</button><button class="del-btn" onclick="reqDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')">Delete</button></div>`;
+  const hasPartial = b.notes && b.notes.includes('Partial');
+  const editPartialBtn = hasPartial ? `<button class="action-btn" onclick="togglePartial('${b.id}', true)">Edit partial</button>` : '';
+  if(mode==='open') acts=`<div class="btn-row"><button class="action-btn" onclick="toggleEdit('${b.id}')">Edit</button><button class="action-btn" onclick="togglePartial('${b.id}')">Partial</button>${editPartialBtn}<button class="action-btn" onclick="markPaid('${b.id}')">Mark paid</button><button class="del-btn" onclick="reqDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')">Delete</button></div>`;
   else if(mode==='paid') acts=`<div class="btn-row"><button class="action-btn" onclick="toggleEdit('${b.id}')">Edit</button><button class="action-btn" onclick="markUnpaid('${b.id}')">Unpay</button><button class="del-btn" onclick="reqDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')">Delete</button></div>`;
   else if(mode==='deleted') acts=`<div class="btn-row"><button class="action-btn" onclick="restoreBill('${b.id}')">Restore</button><button class="del-btn" onclick="permanentDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')" style="color:#c0392b;border-color:#f0d0d0">Perm. delete</button></div>`;
 
@@ -396,15 +400,16 @@ function rowHTML(b, mode){
       ${b.deletedAt?`<span>Deleted ${fmtDate(b.deletedAt)}</span>`:''}
     </div>
     <div class="edit-form" id="pf-${b.id}" style="border-top:1px solid #f0f0f0;margin-top:12px;padding-top:12px;display:none">
-      <div style="font-size:12px;font-weight:600;color:#666;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px">Log Partial Payment</div>
+      <div style="font-size:12px;font-weight:600;color:#666;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px" id="pf-title-${b.id}">Log Partial Payment</div>
       <div class="edit-grid" style="margin-bottom:10px">
         <div class="ef-field"><label>Amount paid ($)</label><input type="number" id="pp-amt-${b.id}" step="0.01" placeholder="0.00"></div>
         <div class="ef-field"><label>Date paid</label><input type="date" id="pp-date-${b.id}" value="${new Date().toISOString().split('T')[0]}"></div>
         <div class="ef-field"><label>New due date</label><input type="date" id="pp-due-${b.id}" value="${b.dueDate||''}"></div>
+        <div class="ef-field" id="pp-prev-wrap-${b.id}" style="display:none"><label>Previous amount paid (to reverse)</label><input type="number" id="pp-prev-${b.id}" step="0.01" placeholder="0.00"></div>
       </div>
       <div class="ef-actions">
         <button class="btn-cancel" onclick="togglePartial('${b.id}')">Cancel</button>
-        <button class="btn-save" onclick="savePartial('${b.id}')">Save + sync</button>
+        <button class="btn-save" id="pp-save-btn-${b.id}" onclick="savePartial('${b.id}')">Save + sync</button>
       </div>
     </div>
     <div class="edit-form" id="ef-${b.id}">
@@ -434,10 +439,28 @@ function toggleEdit(id){
   row.classList.toggle('editing',!open);
 }
 
-function togglePartial(id){
+function togglePartial(id, editMode){
   const pf=document.getElementById('pf-'+id);
   const open=pf.style.display==='block';
-  pf.style.display=open?'none':'block';
+  if(open && !editMode){pf.style.display='none';return;}
+  // Set mode
+  const title=document.getElementById('pf-title-'+id);
+  const prevWrap=document.getElementById('pp-prev-wrap-'+id);
+  if(editMode){
+    title.textContent='Edit Last Partial Payment';
+    prevWrap.style.display='block';
+    // Pre-fill with last partial from notes
+    const b=bills.find(x=>x.id===id);
+    if(b&&b.notes){
+      const match=b.notes.match(/Partial \$([0-9.]+) paid/);
+      if(match) document.getElementById('pp-prev-'+id).value=match[1];
+    }
+  } else {
+    title.textContent='Log Partial Payment';
+    prevWrap.style.display='none';
+    document.getElementById('pp-amt-'+id).value='';
+  }
+  pf.style.display='block';
 }
 
 function savePartial(id){
@@ -446,16 +469,23 @@ function savePartial(id){
   const amtPaid=parseFloat(document.getElementById('pp-amt-'+id).value);
   const datePaid=document.getElementById('pp-date-'+id).value||null;
   const newDue=document.getElementById('pp-due-'+id).value||null;
+  const prevAmt=parseFloat(document.getElementById('pp-prev-'+id).value)||0;
   if(!amtPaid||amtPaid<=0){alert('Enter a valid amount paid.');return;}
   const displayDate=datePaid?fmtDate(datePaid):fmtDate(td());
-  // Update remaining amount
-  if(b.amount) b.amount=Math.max(0,parseFloat(b.amount)-amtPaid);
+  // If editing, reverse previous partial first
+  if(prevAmt>0) b.amount=parseFloat(b.amount||0)+prevAmt;
+  // Apply new partial
+  if(b.amount!==null&&b.amount!==undefined) b.amount=Math.max(0,parseFloat(b.amount)-amtPaid);
   // Update due date if provided
   if(newDue) b.dueDate=newDue;
-  // Append note
-  const note='Partial $'+amtPaid.toFixed(2)+' paid '+displayDate;
-  b.notes=b.notes?b.notes+' | '+note:note;
-  b.status=autoStatus(b.dueDate, 'Unpaid');
+  // Update note — replace last partial note if editing, otherwise append
+  const newNote='Partial $'+amtPaid.toFixed(2)+' paid '+displayDate;
+  if(prevAmt>0){
+    b.notes=(b.notes||'').replace(/Partial \$[0-9.]+ paid [0-9.]+/,newNote);
+  } else {
+    b.notes=b.notes?b.notes+' | '+newNote:newNote;
+  }
+  b.status=autoStatus(b.dueDate,'Unpaid');
   saveBills();render();
   pushToSheet('update',{bill:b});
   document.getElementById('pf-'+id).style.display='none';
