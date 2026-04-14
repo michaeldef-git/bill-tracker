@@ -331,6 +331,12 @@ function calcDays(d){
   const due=new Date(d+'T00:00:00');
   return Math.ceil((due-today)/86400000);
 }
+function autoStatus(dueDate, currentStatus){
+  if(!dueDate) return currentStatus||'Unpaid';
+  const days=calcDays(dueDate);
+  if(days<0) return 'Past Due';
+  return 'Unpaid';
+}
 function fmtAmt(a){
   if(!a||a==0) return null;
   return '$'+parseFloat(a).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -347,7 +353,6 @@ function rowHTML(b, mode){
   const balance=fmtAmt(b.balance);
   const avail=fmtAmt(b.availCredit);
   const rc=mode==='paid'?'paid-card':mode==='deleted'?'deleted-card':'';
-  const showBadge=mode==='open';
 
   let amountHTML='';
   if(payment&&balance){
@@ -365,8 +370,8 @@ function rowHTML(b, mode){
 
   let acts='';
   if(mode==='open') acts=`<div class="btn-row"><button class="action-btn" onclick="toggleEdit('${b.id}')">Edit</button><button class="action-btn" onclick="markPaid('${b.id}')">Mark paid</button><button class="del-btn" onclick="reqDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')">Delete</button></div>`;
-  else if(mode==='paid') acts=`<div class="btn-row"><button class="action-btn" onclick="toggleEdit('${b.id}')">Edit</button><button class="action-btn" onclick="markUnpaid('${b.id}')">Move to unpaid</button></div>`;
-  else if(mode==='deleted') acts=`<div class="btn-row"><button class="action-btn" onclick="restoreBill('${b.id}')">Restore</button><button class="del-btn" onclick="permanentDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')">Perm. delete</button></div>`;
+  else if(mode==='paid') acts=`<div class="btn-row"><button class="action-btn" onclick="toggleEdit('${b.id}')">Edit</button><button class="action-btn" onclick="markUnpaid('${b.id}')">Unpay</button><button class="del-btn" onclick="reqDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')">Delete</button></div>`;
+  else if(mode==='deleted') acts=`<div class="btn-row"><button class="action-btn" onclick="restoreBill('${b.id}')">Restore</button><button class="del-btn" onclick="permanentDelete('${b.id}','${b.name.replace(/'/g,"\\'")}')" style="color:#c0392b;border-color:#f0d0d0">Perm. delete</button></div>`;
 
   return `<div class="bill-card ${rc}" id="row-${b.id}">
     <div class="bill-top">
@@ -381,12 +386,12 @@ function rowHTML(b, mode){
       </div>
     </div>
     <div class="bill-mid">
-      ${showBadge&&lbl?`<span class="badge ${bc}">${lbl}</span>`:'<span></span>'}
+      ${lbl?`<span class="badge ${bc}">${lbl}</span>`:'<span></span>'}
       ${acts}
     </div>
     <div class="bill-footer">
       <span>Logged ${fmtDate(b.loggedAt)}</span>
-      ${b.paidOn?`<span style="color:var(--color-text-success,#155724);font-weight:500">Paid ${fmtDate(b.paidOn)}</span>`:''}
+      ${b.paidOn?`<span>Paid on ${fmtDate(b.paidOn)}</span>`:''}
       ${b.deletedAt?`<span>Deleted ${fmtDate(b.deletedAt)}</span>`:''}
     </div>
     <div class="edit-form" id="ef-${b.id}">
@@ -445,20 +450,25 @@ function render(){
     const priDiff=(o[getPri(a)]||3)-(o[getPri(b)]||3);
     if(priDiff!==0) return priDiff;
     // Within same priority, ascending days (fewest days first)
-    const da=a.dueDate?calcDays(a.dueDate):9999;
-    const db=b.dueDate?calcDays(b.dueDate):9999;
-    return da-db;
+    const dA=a.dueDate?calcDays(a.dueDate):9999;
+    const dB=b.dueDate?calcDays(b.dueDate):9999;
+    return dA-dB;
   });
 
   document.getElementById('bills-list').innerHTML=filt.length?filt.map(b=>rowHTML(b,'open')).join(''):'<div class="empty-state">No bills match this filter.</div>';
-  const paidSorted=[...paid].sort((a,b)=>(b.paidOn||'').localeCompare(a.paidOn||''));
-  document.getElementById('paid-list').innerHTML=paidSorted.length?paidSorted.map(b=>rowHTML(b,'paid')).join(''):'<div class="empty-state">No paid bills yet.</div>';
+  document.getElementById('paid-list').innerHTML=paid.length?paid.map(b=>rowHTML(b,'paid')).join(''):'<div class="empty-state">No paid bills yet.</div>';
   document.getElementById('deleted-list').innerHTML=del.length?del.map(b=>rowHTML(b,'deleted')).join(''):'<div class="empty-state">No deleted bills.</div>';
 
   const owed=open.filter(b=>b.amount).reduce((s,b)=>s+parseFloat(b.amount),0);
   document.getElementById('m-total').textContent='$'+owed.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-  document.getElementById('m-urgent').textContent=open.filter(b=>getPri(b)==='red').length;
-  document.getElementById('m-week').textContent=open.filter(b=>['red','amber'].includes(getPri(b))).length;
+  const urgentBills=open.filter(b=>getPri(b)==='red');
+  const weekBills=open.filter(b=>['red','amber'].includes(getPri(b)));
+  const urgentAmt=urgentBills.filter(b=>b.amount).reduce((s,b)=>s+parseFloat(b.amount),0);
+  const weekAmt=weekBills.filter(b=>b.amount).reduce((s,b)=>s+parseFloat(b.amount),0);
+  document.getElementById('m-urgent').textContent=urgentBills.length;
+  document.getElementById('m-urgent-amt').textContent=urgentAmt>0?'$'+urgentAmt.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'';
+  document.getElementById('m-week').textContent=weekBills.length;
+  document.getElementById('m-week-amt').textContent=weekAmt>0?'$'+weekAmt.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'';
   document.getElementById('m-count').textContent=open.length;
 }
 
@@ -563,7 +573,7 @@ function confirmParsed(){
       id:Date.now()+Math.random().toString(36).slice(2),
       name:i.name,category:i.category||'Other',
       amount:i.amount!==null&&i.amount!==undefined?i.amount:null,balance:i.balance!==null&&i.balance!==undefined?i.balance:null,availCredit:null,
-      dueDate:i.dueDate||null,status:i.status||'Unpaid',
+      dueDate:i.dueDate||null,status:autoStatus(i.dueDate, i.status),
       notes:i.notes||'',loggedAt:t,paid:false,deleted:false
     };
     bills.push(bill);
@@ -585,7 +595,7 @@ function addManual(){
     amount:document.getElementById('m-amount').value!==''?parseFloat(document.getElementById('m-amount').value):null,availCredit:document.getElementById('m-avail').value!==''?parseFloat(document.getElementById('m-avail').value):null,
     balance:document.getElementById('m-balance').value!==''?parseFloat(document.getElementById('m-balance').value):null,
     dueDate:document.getElementById('m-due').value||null,
-    status:document.getElementById('m-status').value,
+    status:autoStatus(document.getElementById('m-due').value||null, document.getElementById('m-status').value),
     notes:document.getElementById('m-notes').value.trim(),
     loggedAt:td(),paid:false,deleted:false
   };
