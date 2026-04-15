@@ -171,6 +171,7 @@ textarea{min-height:110px;resize:vertical;line-height:1.5}
         <div class="ef-field"><label>Balance ($)</label><input type="number" id="m-balance" placeholder="0.00" step="0.01"></div>
         <div class="ef-field"><label>Due date</label><input type="date" id="m-due"></div>
         <div class="ef-field"><label>Status</label><select id="m-status"><option>Unpaid</option><option>Past Due</option></select></div>
+        <div class="ef-field"><label>Type</label><select id="m-type"><option value="M">Manual</option><option value="A">Autopay</option></select></div>
       </div>
       <div class="ef-field"><label>Avail credit ($)</label><input type="number" id="m-avail" placeholder="0.00" step="0.01"></div>
       <div class="ef-field" style="margin-bottom:12px;grid-column:1/-1"><label>Notes</label><input type="text" id="m-notes" placeholder="Optional"></div>
@@ -421,6 +422,7 @@ function rowHTML(b, mode){
         <div class="ef-field"><label>Avail credit ($)</label><input type="number" id="eav-${b.id}" value="${b.availCredit||''}" step="0.01" placeholder="0.00"></div>
         <div class="ef-field"><label>Due date</label><input type="date" id="ed-${b.id}" value="${b.dueDate||''}"></div>
         <div class="ef-field"><label>Status</label><select id="es-${b.id}"><option value="Unpaid"${b.status==='Unpaid'?' selected':''}>Unpaid</option><option value="Past Due"${b.status==='Past Due'?' selected':''}>Past due</option></select></div>
+        <div class="ef-field"><label>Type</label><select id="et-${b.id}"><option value="M"${(!b.paymentType||b.paymentType==='M')?' selected':''}>Manual</option><option value="A"${b.paymentType==='A'?' selected':''}>Autopay</option></select></div>
       </div>
       <div class="ef-field" style="margin-bottom:10px"><label>Notes</label><input type="text" id="eno-${b.id}" value="${b.notes||''}" placeholder="Optional"></div>
       <div class="ef-actions">
@@ -502,6 +504,7 @@ function saveEdit(id){
   b.status=document.getElementById('es-'+id).value;
   b.availCredit=document.getElementById('eav-'+id).value!==''?parseFloat(document.getElementById('eav-'+id).value):null;
   b.notes=document.getElementById('eno-'+id).value.trim();
+  b.paymentType=document.getElementById('et-'+id).value;
   b.status=autoStatus(b.dueDate, b.status);
   saveBills();render();
   pushToSheet('update',{bill:b});
@@ -641,7 +644,7 @@ function confirmParsed(){
       name:i.name,category:i.category||'Other',
       amount:i.amount!==null&&i.amount!==undefined?i.amount:null,balance:i.balance!==null&&i.balance!==undefined?i.balance:null,availCredit:null,
       dueDate:i.dueDate||null,status:autoStatus(i.dueDate, i.status),
-      notes:i.notes||'',loggedAt:t,paid:false,deleted:false
+      notes:i.notes||'',paymentType:'M',loggedAt:t,paid:false,deleted:false
     };
     bills.push(bill);
     pushToSheet('add',{bill});
@@ -664,12 +667,14 @@ function addManual(){
     dueDate:document.getElementById('m-due').value||null,
     status:autoStatus(document.getElementById('m-due').value||null, document.getElementById('m-status').value),
     notes:document.getElementById('m-notes').value.trim(),
+    paymentType:document.getElementById('m-type').value,
     loggedAt:td(),paid:false,deleted:false
   };
   bills.push(bill);
   saveBills();render();
   pushToSheet('add',{bill});
   ['m-name','m-amount','m-balance','m-avail','m-due','m-notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('m-type').value='M';
   const msg=document.getElementById('manual-msg');
   msg.style.display='block';
   setTimeout(()=>msg.style.display='none',2500);
